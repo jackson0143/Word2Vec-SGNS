@@ -1,4 +1,5 @@
-Word2Vec Skip-gram Implementation
+# Word2Vec Skip-gram Implementation
+
 A small word2vec skipgram model built using PyTorch
 
 - Still need to add the negative sampling
