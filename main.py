@@ -34,16 +34,16 @@ def tokenise(text: str) -> List[str]:
     return re.findall(r"[a-z0-9]+'[a-z0-9]+|[a-z0-9]+", text.lower(), flags=re.I)
 
 #Note to self: need to drop low frequency words, need a threshold for that
-def build_vocab(tokenised_utts: List[List[str]]) -> Tuple[List[str], Dict[str, int], Dict[int, str]]:
+def build_vocab(tokenised_utts: List[List[str]]) -> Tuple[Dict[str, int], Dict[int, str], torch.Tensor]:
     # Flatten tokenised utterances into a single list of words
     words: List[str] = [token for utt in tokenised_utts for token in utt]
     counts = Counter(words)
+
 
     sorted_vocab: List[Tuple[str, int]] = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     idx_to_word: Dict[int, str] = {idx: word for idx, (word, _) in enumerate(sorted_vocab)}
     word_to_idx: Dict[str, int] = {word: idx for idx, word in idx_to_word.items()}
     return words, word_to_idx, idx_to_word
-
 
 def tokens_to_ids(tokenised_utts: List[List[str]], word_to_idx: Dict[str, int]) -> List[List[int]]:
     return [[word_to_idx[w] for w in utt if w in word_to_idx] for utt in tokenised_utts]
@@ -111,8 +111,8 @@ but we average the input embeddings to get a better representation of the center
 class SkipGram(nn.Module):
     def __init__(self, vocab_size: int, embedding_dim: int):
         super().__init__()
-        self.input_embeddings = nn.Embedding(vocab_size, embedding_dim) #embedding matrix for center words
-        self.output_embeddings = nn.Embedding(vocab_size, embedding_dim) #embedding matrix for context words
+        self.input_embeddings = nn.Embedding(vocab_size, embedding_dim, sparse=True) 
+        self.output_embeddings = nn.Embedding(vocab_size, embedding_dim, sparse=True) 
 
     def forward(self, center_indices: torch.Tensor) -> torch.Tensor:
         center_vecs = self.input_embeddings(center_indices) 
@@ -159,6 +159,7 @@ def main():
 
     # Tokenise and build vocab (word to index and index to word)
     tokenised_utts = [tokenise(utt) for utt in chosen_utts]
+  
     words, word_to_idx, idx_to_word = build_vocab(tokenised_utts)
     utt_ids = tokens_to_ids(tokenised_utts, word_to_idx)
 
@@ -177,7 +178,7 @@ def main():
     vocab_size = len(word_to_idx)
     model = SkipGram(vocab_size=vocab_size, embedding_dim=EMBEDDING_DIM).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimiser = torch.optim.Adam(model.parameters(), lr=LR)
+    optimiser = torch.optim.SparseAdam(model.parameters(), lr=LR)
 
     print(f"Vocab size: {vocab_size}, Using device: {device}")
 
@@ -186,7 +187,7 @@ def main():
     for epoch in range(EPOCHS):
         total_loss = 0.0
         step = 0
-        for centers_tensor, contexts_tensor in tqdm(dataloader, desc=f"Epoch {epoch+1}/{EPOCHS}"):
+        for centers_tensor, contexts_tensor in dataloader:
             centers_tensor = centers_tensor.to(device).long()
             contexts_tensor = contexts_tensor.to(device).long()
 
